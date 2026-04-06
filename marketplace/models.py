@@ -66,3 +66,97 @@ class Supplier(models.Model):
     
     def __str__(self):
         return f"Supplier: {self.business_name}"
+
+
+class Brand(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'brands'
+        verbose_name = 'Brand'
+        verbose_name_plural = 'Brands'
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+
+
+class Model(models.Model):
+    name = models.CharField(max_length=100)
+    brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name='models')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'models'
+        verbose_name = 'Model'
+        verbose_name_plural = 'Models'
+        ordering = ['name']
+        unique_together = [['name', 'brand']]
+    
+    def __str__(self):
+        return f"{self.brand.name} {self.name}"
+
+
+class ModelYear(models.Model):
+    year = models.IntegerField()
+    model = models.ForeignKey(Model, on_delete=models.CASCADE, related_name='model_years')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'model_years'
+        verbose_name = 'Model Year'
+        verbose_name_plural = 'Model Years'
+        ordering = ['-year']
+        unique_together = [['year', 'model']]
+    
+    def __str__(self):
+        return f"{self.model.brand.name} {self.model.name} ({self.year})"
+
+
+class Engine(models.Model):
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=50)
+    horsepower = models.IntegerField()
+    model_year = models.ForeignKey(ModelYear, on_delete=models.CASCADE, related_name='engines')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'engines'
+        verbose_name = 'Engine'
+        verbose_name_plural = 'Engines'
+        ordering = ['name']
+    
+    def __str__(self):
+        return f"{self.name} - {self.type} ({self.horsepower}hp)"
+
+
+class Category(models.Model):
+    name = models.CharField(max_length=100)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'categories'
+        verbose_name = 'Category'
+        verbose_name_plural = 'Categories'
+        ordering = ['name']
+    
+    def __str__(self):
+        if self.parent:
+            return f"{self.parent.name} > {self.name}"
+        return self.name
+    
+    def get_full_path(self):
+        """Get the full hierarchical path of the category"""
+        path = [self.name]
+        parent = self.parent
+        while parent:
+            path.insert(0, parent.name)
+            parent = parent.parent
+        return ' > '.join(path)
