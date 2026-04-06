@@ -160,3 +160,56 @@ class Category(models.Model):
             path.insert(0, parent.name)
             parent = parent.parent
         return ' > '.join(path)
+
+
+class Part(models.Model):
+    CONDITION_CHOICES = (
+        ('NEW', 'New'),
+        ('USED', 'Used'),
+    )
+    
+    # Basic Information
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='parts')
+    name = models.CharField(max_length=255)
+    reference = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+    
+    # Vehicle Targeting
+    brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='parts')
+    model = models.ForeignKey(Model, on_delete=models.PROTECT, related_name='parts')
+    model_year = models.ForeignKey(ModelYear, on_delete=models.PROTECT, related_name='parts')
+    engine = models.ForeignKey(Engine, on_delete=models.SET_NULL, null=True, blank=True, related_name='parts')
+    
+    # Categorization
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='parts')
+    
+    # Commercial Details
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.IntegerField(default=0)
+    condition = models.CharField(max_length=10, choices=CONDITION_CHOICES, default='NEW')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'parts'
+        verbose_name = 'Part'
+        verbose_name_plural = 'Parts'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['supplier', 'created_at']),
+            models.Index(fields=['brand', 'model', 'model_year']),
+            models.Index(fields=['category']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.reference}) - {self.supplier.business_name}"
+    
+    def is_in_stock(self):
+        """Check if part is in stock"""
+        return self.quantity > 0
+    
+    def get_vehicle_compatibility(self):
+        """Get vehicle compatibility details"""
+        return f"{self.brand.name} {self.model.name} ({self.model_year.year})"
