@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Client, Supplier
+from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -110,3 +110,140 @@ class LoginSerializer(serializers.Serializer):
         
         attrs['user'] = user
         return attrs
+
+
+# Part Serializers
+
+class PartSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Part model with related data
+    """
+    supplier = serializers.SerializerMethodField()
+    brand = serializers.SerializerMethodField()
+    model = serializers.SerializerMethodField()
+    model_year = serializers.SerializerMethodField()
+    engine = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
+    is_in_stock = serializers.SerializerMethodField()
+    vehicle_compatibility = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Part
+        fields = [
+            'id', 'supplier', 'name', 'reference', 'description',
+            'brand', 'model', 'model_year', 'engine', 'category',
+            'price', 'quantity', 'condition', 'is_in_stock', 'vehicle_compatibility',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_supplier(self, obj):
+        return {
+            'id': obj.supplier.id,
+            'business_name': obj.supplier.business_name,
+            'user': {
+                'id': obj.supplier.user.id,
+                'username': obj.supplier.user.username
+            }
+        }
+    
+    def get_brand(self, obj):
+        return {
+            'id': obj.brand.id,
+            'name': obj.brand.name
+        }
+    
+    def get_model(self, obj):
+        return {
+            'id': obj.model.id,
+            'name': obj.model.name
+        }
+    
+    def get_model_year(self, obj):
+        return {
+            'id': obj.model_year.id,
+            'year': obj.model_year.year
+        }
+    
+    def get_engine(self, obj):
+        if obj.engine:
+            return {
+                'id': obj.engine.id,
+                'name': obj.engine.name,
+                'type': obj.engine.type,
+                'horsepower': obj.engine.horsepower
+            }
+        return None
+    
+    def get_category(self, obj):
+        return {
+            'id': obj.category.id,
+            'name': obj.category.name
+        }
+    
+    def get_is_in_stock(self, obj):
+        return obj.is_in_stock()
+    
+    def get_vehicle_compatibility(self, obj):
+        return obj.get_vehicle_compatibility()
+
+
+class PartCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating new parts (Supplier only)
+    """
+    class Meta:
+        model = Part
+        fields = [
+            'name', 'reference', 'description',
+            'brand', 'model', 'model_year', 'engine',
+            'category', 'price', 'quantity', 'condition'
+        ]
+    
+    def validate_reference(self, value):
+        """Ensure reference is unique"""
+        if Part.objects.filter(reference=value).exists():
+            raise serializers.ValidationError("A part with this reference already exists.")
+        return value
+    
+    def validate_price(self, value):
+        """Ensure price is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than 0.")
+        return value
+    
+    def validate_quantity(self, value):
+        """Ensure quantity is not negative"""
+        if value < 0:
+            raise serializers.ValidationError("Quantity cannot be negative.")
+        return value
+    
+    def create(self, validated_data):
+        # Set supplier from request user
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'supplier_profile'):
+            validated_data['supplier'] = request.user.supplier_profile
+        return super().create(validated_data)
+
+
+class PartUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating parts (Supplier only, own parts)
+    """
+    class Meta:
+        model = Part
+        fields = [
+            'name', 'description', 'price', 'quantity', 'condition'
+        ]
+    
+    def validate_price(self, value):
+        """Ensure price is positive"""
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than 0.")
+        return value
+    
+    def validate_quantity(self, value):
+        """Ensure quantity is not negative"""
+        if value < 0:
+            raise serializers.ValidationError("Quantity cannot be negative.")
+        return value
