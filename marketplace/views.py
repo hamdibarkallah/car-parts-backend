@@ -235,6 +235,21 @@ class PartListCreateView(generics.ListCreateAPIView):
         if brand_id:
             queryset = queryset.filter(brand_id=brand_id)
         
+        # Filter by model
+        model_id = self.request.query_params.get('model')
+        if model_id:
+            queryset = queryset.filter(model_id=model_id)
+        
+        # Filter by year (model_year)
+        year_id = self.request.query_params.get('year')
+        if year_id:
+            queryset = queryset.filter(model_year_id=year_id)
+        
+        # Filter by engine
+        engine_id = self.request.query_params.get('engine')
+        if engine_id:
+            queryset = queryset.filter(engine_id=engine_id)
+        
         # Filter by category
         category_id = self.request.query_params.get('category')
         if category_id:
@@ -268,6 +283,9 @@ class PartListCreateView(generics.ListCreateAPIView):
         manual_parameters=[
             openapi.Parameter('supplier', openapi.IN_QUERY, description="Filter by supplier ID", type=openapi.TYPE_INTEGER),
             openapi.Parameter('brand', openapi.IN_QUERY, description="Filter by brand ID", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('model', openapi.IN_QUERY, description="Filter by model ID", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('year', openapi.IN_QUERY, description="Filter by model year ID", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('engine', openapi.IN_QUERY, description="Filter by engine ID", type=openapi.TYPE_INTEGER),
             openapi.Parameter('category', openapi.IN_QUERY, description="Filter by category ID", type=openapi.TYPE_INTEGER),
             openapi.Parameter('condition', openapi.IN_QUERY, description="Filter by condition (NEW/USED)", type=openapi.TYPE_STRING),
             openapi.Parameter('in_stock', openapi.IN_QUERY, description="Filter by in stock status (true/false)", type=openapi.TYPE_BOOLEAN),
