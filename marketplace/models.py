@@ -213,3 +213,31 @@ class Part(models.Model):
     def get_vehicle_compatibility(self):
         """Get vehicle compatibility details"""
         return f"{self.brand.name} {self.model.name} ({self.model_year.year})"
+
+
+class PartImage(models.Model):
+    part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='parts/%Y/%m/%d/')
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'part_images'
+        verbose_name = 'Part Image'
+        verbose_name_plural = 'Part Images'
+        ordering = ['-is_primary', '-created_at']
+    
+    def __str__(self):
+        return f"Image for {self.part.name} - {'Primary' if self.is_primary else 'Additional'}"
+    
+    def save(self, *args, **kwargs):
+        # If this image is set as primary, unset other primary images for this part
+        if self.is_primary:
+            PartImage.objects.filter(part=self.part, is_primary=True).update(is_primary=False)
+        super().save(*args, **kwargs)
+    
+    def delete(self, *args, **kwargs):
+        # Delete the image file from storage
+        if self.image:
+            self.image.delete(save=False)
+        super().delete(*args, **kwargs)
