@@ -241,3 +241,88 @@ class PartImage(models.Model):
         if self.image:
             self.image.delete(save=False)
         super().delete(*args, **kwargs)
+
+
+class Cart(models.Model):
+    client = models.OneToOneField(Client, on_delete=models.CASCADE, related_name='cart')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'carts'
+        verbose_name = 'Cart'
+        verbose_name_plural = 'Carts'
+    
+    def __str__(self):
+        return f"Cart for {self.client.user.username}"
+    
+    def get_total(self):
+        """Calculate total price of all items in cart"""
+        return sum(item.get_subtotal() for item in self.items.all())
+    
+    def get_item_count(self):
+        """Get total number of items in cart"""
+        return self.items.count()
+
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
+    part = models.ForeignKey(Part, on_delete=models.CASCADE, related_name='cart_items')
+    quantity = models.IntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'cart_items'
+        verbose_name = 'Cart Item'
+        verbose_name_plural = 'Cart Items'
+        unique_together = [['cart', 'part']]
+    
+    def __str__(self):
+        return f"{self.quantity}x {self.part.name} in {self.cart}"
+    
+    def get_subtotal(self):
+        """Calculate subtotal for this cart item"""
+        return self.part.price * self.quantity
+
+
+class Order(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('PAID', 'Paid'),
+        ('SHIPPED', 'Shipped'),
+        ('DELIVERED', 'Delivered'),
+        ('CANCELLED', 'Cancelled'),
+    )
+    
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='orders')
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'orders'
+        verbose_name = 'Order'
+        verbose_name_plural = 'Orders'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Order #{self.id} - {self.client.user.username} ({self.get_status_display()})"
+
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    part = models.ForeignKey(Part, on_delete=models.PROTECT, related_name='order_items')
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='order_items')
+    quantity = models.IntegerField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    class Meta:
+        db_table = 'order_items'
+        verbose_name = 'Order Item'
+        verbose_name_plural = 'Order Items'
+    
+    def __str__(self):
+        return f"{self.quantity}x {self.part.name} @ {self.price} in Order #{self.order.id}"

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category
+from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category, Cart, CartItem, Order, OrderItem
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -247,3 +247,143 @@ class PartUpdateSerializer(serializers.ModelSerializer):
         if value < 0:
             raise serializers.ValidationError("Quantity cannot be negative.")
         return value
+
+
+# Cart Serializers
+
+class CartItemSerializer(serializers.ModelSerializer):
+    """Read serializer for cart items with part details"""
+    part_detail = serializers.SerializerMethodField()
+    subtotal = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CartItem
+        fields = ['id', 'part', 'part_detail', 'quantity', 'subtotal', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_part_detail(self, obj):
+        return {
+            'id': obj.part.id,
+            'name': obj.part.name,
+            'reference': obj.part.reference,
+            'price': str(obj.part.price),
+            'condition': obj.part.condition,
+            'supplier': obj.part.supplier.business_name,
+            'in_stock': obj.part.is_in_stock(),
+            'available_quantity': obj.part.quantity,
+        }
+    
+    def get_subtotal(self, obj):
+        return str(obj.get_subtotal())
+
+
+class CartSerializer(serializers.ModelSerializer):
+    """Read serializer for cart with all items"""
+    items = CartItemSerializer(many=True, read_only=True)
+    total = serializers.SerializerMethodField()
+    item_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Cart
+        fields = ['id', 'items', 'total', 'item_count', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_total(self, obj):
+        return str(obj.get_total())
+    
+    def get_item_count(self, obj):
+        return obj.get_item_count()
+
+
+class AddToCartSerializer(serializers.Serializer):
+    """Serializer for adding an item to cart"""
+    part_id = serializers.IntegerField()
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    
+    def validate_part_id(self, value):
+        try:
+            part = Part.objects.get(id=value)
+        except Part.DoesNotExist:
+            raise serializers.ValidationError("Part not found.")
+        if not part.is_in_stock():
+            raise serializers.ValidationError("Part is out of stock.")
+        return value
+    
+    def validate(self, attrs):
+        part = Part.objects.get(id=attrs['part_id'])
+        if attrs['quantity'] > part.quantity:
+            raise serializers.ValidationError({
+                "quantity": f"Requested quantity ({attrs['quantity']}) exceeds available stock ({part.quantity})."
+            })
+        return attrs
+
+
+class UpdateCartItemSerializer(serializers.Serializer):
+    """Serializer for updating cart item quantity"""
+    quantity = serializers.IntegerField(min_value=1)
+    
+    def validate_quantity(self, value):
+        if hasattr(self, 'instance') and self.instance:
+            part = self.instance.part
+            if value > part.quantity:
+                raise serializers.ValidationError(
+                    f"Requested quantity ({value}) exceeds available stock ({part.quantity})."
+                )
+        return value
+
+
+# Order Serializers
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    """Read serializer for order items"""
+    part_detail = serializers.SerializerMethodField()
+    supplier_detail = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrderItem
+        fields = ['id', 'part', 'part_detail', 'supplier', 'supplier_detail', 'quantity', 'price', 'total_price']
+        read_only_fields = ['id']
+    
+    def get_part_detail(self, obj):
+        return {
+            'id': obj.part.id,
+            'name': obj.part.name,
+            'reference': obj.part.reference,
+        }
+    
+    def get_supplier_detail(self, obj):
+        return {
+            'id': obj.supplier.user.id,
+            'business_name': obj.supplier.business_name,
+        }
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    """Read serializer for orders with all items"""
+    items = OrderItemSerializer(many=True, read_only=True)
+    client_username = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Order
+        fields = ['id', 'client', 'client_username', 'total_price', 'status', 'items', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'client', 'total_price', 'created_at', 'updated_at']
+    
+    def get_client_username(self, obj):
+        return obj.client.user.username
+
+
+class OrderListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for order list (no items)"""
+    client_username = serializers.SerializerMethodField()
+    item_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Order
+        fields = ['id', 'client_username', 'total_price', 'status', 'item_count', 'created_at']
+        read_only_fields = ['id', 'total_price', 'created_at']
+    
+    def get_client_username(self, obj):
+        return obj.client.user.username
+    
+    def get_item_count(self, obj):
+        return obj.items.count()

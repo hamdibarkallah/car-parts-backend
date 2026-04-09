@@ -5,8 +5,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db import models
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer, PartSerializer, PartCreateSerializer, PartUpdateSerializer
-from .models import User, Part
+from django.db import transaction
+from .serializers import (
+    RegisterSerializer, LoginSerializer, UserSerializer,
+    PartSerializer, PartCreateSerializer, PartUpdateSerializer,
+    CartSerializer, CartItemSerializer, AddToCartSerializer, UpdateCartItemSerializer,
+    OrderSerializer, OrderListSerializer,
+)
+from .models import User, Part, Cart, CartItem, Order, OrderItem
 
 
 class RegisterView(generics.CreateAPIView):
@@ -460,3 +466,283 @@ class PartDetailView(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         return super().delete(request, *args, **kwargs)
+
+
+# Cart Views
+
+class CartView(APIView):
+    """
+    Get the current client's cart
+    
+    GET: Retrieve cart with all items, totals
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def _get_client(self, user):
+        if not hasattr(user, 'client_profile'):
+            return None
+        return user.client_profile
+    
+    @swagger_auto_schema(
+        operation_description="Get the current client's cart with all items and totals",
+        operation_summary="Get Cart",
+        tags=['Cart'],
+        responses={
+            200: CartSerializer,
+            403: "Forbidden - Client access required",
+        }
+    )
+    def get(self, request):
+        client = self._get_client(request.user)
+        if not client:
+            return Response({'error': 'Only clients can access the cart'}, status=status.HTTP_403_FORBIDDEN)
+        
+        cart, _ = Cart.objects.get_or_create(client=client)
+        serializer = CartSerializer(cart)
+        return Response(serializer.data)
+
+
+class CartAddItemView(APIView):
+    """
+    Add an item to the cart
+    
+    POST: Add a part to the client's cart. If part already in cart, quantity is increased.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Add a part to the client's cart. If the part already exists in the cart, the quantity is increased.",
+        operation_summary="Add Item to Cart",
+        tags=['Cart'],
+        request_body=AddToCartSerializer,
+        responses={
+            200: CartSerializer,
+            400: "Bad Request - Invalid data or stock issue",
+            403: "Forbidden - Client access required",
+        }
+    )
+    def post(self, request):
+        if not hasattr(request.user, 'client_profile'):
+            return Response({'error': 'Only clients can add to cart'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = AddToCartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        client = request.user.client_profile
+        cart, _ = Cart.objects.get_or_create(client=client)
+        part = Part.objects.get(id=serializer.validated_data['part_id'])
+        quantity = serializer.validated_data['quantity']
+        
+        # If part already in cart, increase quantity
+        cart_item, created = CartItem.objects.get_or_create(
+            cart=cart, part=part,
+            defaults={'quantity': quantity}
+        )
+        if not created:
+            new_qty = cart_item.quantity + quantity
+            if new_qty > part.quantity:
+                return Response(
+                    {'error': f'Total quantity ({new_qty}) exceeds available stock ({part.quantity}).'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            cart_item.quantity = new_qty
+            cart_item.save()
+        
+        return Response(CartSerializer(cart).data)
+
+
+class CartItemUpdateView(APIView):
+    """
+    Update or remove a cart item
+    
+    PUT: Update cart item quantity
+    DELETE: Remove item from cart
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def _get_cart_item(self, request, item_id):
+        if not hasattr(request.user, 'client_profile'):
+            return None, Response({'error': 'Only clients can modify cart'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            cart_item = CartItem.objects.select_related('cart__client', 'part').get(
+                id=item_id, cart__client=request.user.client_profile
+            )
+            return cart_item, None
+        except CartItem.DoesNotExist:
+            return None, Response({'error': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    @swagger_auto_schema(
+        operation_description="Update the quantity of a specific cart item",
+        operation_summary="Update Cart Item Quantity",
+        tags=['Cart'],
+        request_body=UpdateCartItemSerializer,
+        responses={
+            200: CartSerializer,
+            400: "Bad Request - Invalid quantity or stock issue",
+            403: "Forbidden - Client access required",
+            404: "Not Found - Cart item not found",
+        }
+    )
+    def put(self, request, item_id):
+        cart_item, error = self._get_cart_item(request, item_id)
+        if error:
+            return error
+        
+        serializer = UpdateCartItemSerializer(data=request.data, instance=cart_item)
+        serializer.is_valid(raise_exception=True)
+        
+        cart_item.quantity = serializer.validated_data['quantity']
+        cart_item.save()
+        
+        return Response(CartSerializer(cart_item.cart).data)
+    
+    @swagger_auto_schema(
+        operation_description="Remove an item from the cart",
+        operation_summary="Remove Cart Item",
+        tags=['Cart'],
+        responses={
+            200: CartSerializer,
+            403: "Forbidden - Client access required",
+            404: "Not Found - Cart item not found",
+        }
+    )
+    def delete(self, request, item_id):
+        cart_item, error = self._get_cart_item(request, item_id)
+        if error:
+            return error
+        
+        cart = cart_item.cart
+        cart_item.delete()
+        
+        return Response(CartSerializer(cart).data)
+
+
+# Order Views
+
+class OrderListCreateView(APIView):
+    """
+    List orders or create order from cart
+    
+    GET: List all orders for the current client
+    POST: Create a new order from the client's cart (copies price at order time)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="List all orders for the current client",
+        operation_summary="List Orders",
+        tags=['Orders'],
+        responses={
+            200: OrderListSerializer(many=True),
+            403: "Forbidden - Client access required",
+        }
+    )
+    def get(self, request):
+        if not hasattr(request.user, 'client_profile'):
+            return Response({'error': 'Only clients can view orders'}, status=status.HTTP_403_FORBIDDEN)
+        
+        orders = Order.objects.filter(client=request.user.client_profile).order_by('-created_at')
+        serializer = OrderListSerializer(orders, many=True)
+        return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new order from the client's cart. Copies the current price of each part at order time. Clears the cart after order creation.",
+        operation_summary="Create Order from Cart",
+        tags=['Orders'],
+        responses={
+            201: OrderSerializer,
+            400: "Bad Request - Cart is empty or stock issues",
+            403: "Forbidden - Client access required",
+        }
+    )
+    def post(self, request):
+        if not hasattr(request.user, 'client_profile'):
+            return Response({'error': 'Only clients can create orders'}, status=status.HTTP_403_FORBIDDEN)
+        
+        client = request.user.client_profile
+        
+        try:
+            cart = Cart.objects.prefetch_related('items__part__supplier').get(client=client)
+        except Cart.DoesNotExist:
+            return Response({'error': 'Cart not found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        cart_items = cart.items.all()
+        if not cart_items.exists():
+            return Response({'error': 'Cart is empty'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate stock availability before creating order
+        stock_errors = []
+        for item in cart_items:
+            if item.quantity > item.part.quantity:
+                stock_errors.append(
+                    f"{item.part.name}: requested {item.quantity}, available {item.part.quantity}"
+                )
+        if stock_errors:
+            return Response({'error': 'Insufficient stock', 'details': stock_errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create order in a transaction
+        with transaction.atomic():
+            order = Order.objects.create(client=client, total_price=0)
+            
+            total = 0
+            for item in cart_items:
+                # Copy price at order time
+                item_price = item.part.price
+                item_total = item_price * item.quantity
+                
+                OrderItem.objects.create(
+                    order=order,
+                    part=item.part,
+                    supplier=item.part.supplier,
+                    quantity=item.quantity,
+                    price=item_price,
+                    total_price=item_total,
+                )
+                
+                # Decrease stock
+                item.part.quantity -= item.quantity
+                item.part.save()
+                
+                total += item_total
+            
+            order.total_price = total
+            order.save()
+            
+            # Clear cart
+            cart_items.delete()
+        
+        serializer = OrderSerializer(order)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class OrderDetailView(APIView):
+    """
+    Get details of a specific order
+    
+    GET: Retrieve order with all items and price details
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Get detailed information about a specific order including all items",
+        operation_summary="Get Order Details",
+        tags=['Orders'],
+        responses={
+            200: OrderSerializer,
+            403: "Forbidden - Client access required",
+            404: "Not Found - Order not found",
+        }
+    )
+    def get(self, request, pk):
+        if not hasattr(request.user, 'client_profile'):
+            return Response({'error': 'Only clients can view orders'}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            order = Order.objects.prefetch_related('items__part', 'items__supplier').get(
+                id=pk, client=request.user.client_profile
+            )
+        except Order.DoesNotExist:
+            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = OrderSerializer(order)
+        return Response(serializer.data)
