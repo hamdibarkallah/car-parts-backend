@@ -351,10 +351,10 @@ class PartListCreateView(generics.ListCreateAPIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        # Check if user is a supplier
-        if not hasattr(request.user, 'supplier_profile'):
+        # Admin has full access, otherwise must be a supplier
+        if not request.user.is_admin() and not hasattr(request.user, 'supplier_profile'):
             return Response(
-                {'error': 'Only suppliers can create parts'},
+                {'error': 'Only suppliers and admins can create parts'},
                 status=status.HTTP_403_FORBIDDEN
             )
         return super().post(request, *args, **kwargs)
@@ -413,11 +413,13 @@ class PartDetailView(generics.RetrieveUpdateDestroyAPIView):
     )
     def put(self, request, *args, **kwargs):
         part = self.get_object()
-        if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
-            return Response(
-                {'error': 'You can only update your own parts'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Admin has full access, suppliers can only update their own parts
+        if not request.user.is_admin():
+            if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
+                return Response(
+                    {'error': 'You can only update your own parts'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         return super().put(request, *args, **kwargs)
     
     @swagger_auto_schema(
@@ -438,11 +440,13 @@ class PartDetailView(generics.RetrieveUpdateDestroyAPIView):
     )
     def patch(self, request, *args, **kwargs):
         part = self.get_object()
-        if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
-            return Response(
-                {'error': 'You can only update your own parts'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Admin has full access, suppliers can only update their own parts
+        if not request.user.is_admin():
+            if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
+                return Response(
+                    {'error': 'You can only update your own parts'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         return super().patch(request, *args, **kwargs)
     
     @swagger_auto_schema(
@@ -460,11 +464,13 @@ class PartDetailView(generics.RetrieveUpdateDestroyAPIView):
     )
     def delete(self, request, *args, **kwargs):
         part = self.get_object()
-        if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
-            return Response(
-                {'error': 'You can only delete your own parts'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Admin has full access, suppliers can only delete their own parts
+        if not request.user.is_admin():
+            if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
+                return Response(
+                    {'error': 'You can only delete your own parts'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         return super().delete(request, *args, **kwargs)
 
 
