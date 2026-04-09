@@ -214,10 +214,13 @@ Car spare parts with complete vehicle compatibility targeting and inventory mana
 3. ✅ PostgreSQL configuration
 4. ✅ Docker containerization
 5. ✅ Models implementation (User, Supplier, Client, Brand, Model, ModelYear, Engine, Category, Part)
-6. ⏳ PartImage model & REST API endpoints
-7. ⏳ Cart, CartItem models & endpoints
-8. ⏳ Order, OrderItem models & endpoints
-9. ⏳ Authentication and authorization
+6. ✅ PartImage model & REST API endpoints
+7. ✅ Cart, CartItem models & endpoints
+8. ✅ Order, OrderItem models & endpoints
+9. ✅ Authentication and authorization (JWT + role-based permissions)
+9.1. ✅ Vehicle hierarchy API (Brand, Model, ModelYear, Engine)
+9.2. ✅ Category API (CRUD with hierarchical support)
+9.3. ✅ Stock management (reduce on order, prevent if out of stock)
 10. ⏳ Frontend (Angular)
 11. ⏳ Testing and deployment
 

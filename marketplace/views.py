@@ -6,13 +6,20 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db import models
 from django.db import transaction
+from rest_framework.parsers import MultiPartParser, FormParser
 from .serializers import (
     RegisterSerializer, LoginSerializer, UserSerializer,
     PartSerializer, PartCreateSerializer, PartUpdateSerializer,
     CartSerializer, CartItemSerializer, AddToCartSerializer, UpdateCartItemSerializer,
     OrderSerializer, OrderListSerializer,
+    BrandSerializer, ModelSerializer, ModelYearSerializer, EngineSerializer,
+    CategorySerializer,
+    PartImageSerializer, PartImageUploadSerializer,
 )
-from .models import User, Part, Cart, CartItem, Order, OrderItem
+from .models import (
+    User, Part, Cart, CartItem, Order, OrderItem,
+    Brand, Model, ModelYear, Engine, Category, PartImage,
+)
 
 
 class RegisterView(generics.CreateAPIView):
@@ -752,3 +759,367 @@ class OrderDetailView(APIView):
         
         serializer = OrderSerializer(order)
         return Response(serializer.data)
+
+
+# Vehicle Hierarchy Views
+
+class BrandListCreateView(generics.ListCreateAPIView):
+    """
+    List all brands or create a new one
+    
+    GET: List all brands (public)
+    POST: Create a brand (Admin only)
+    """
+    queryset = Brand.objects.all()
+    serializer_class = BrandSerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+    
+    @swagger_auto_schema(
+        operation_description="List all vehicle brands",
+        operation_summary="List Brands",
+        tags=['Vehicle Hierarchy'],
+        responses={200: BrandSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new brand (Admin only)",
+        operation_summary="Create Brand",
+        tags=['Vehicle Hierarchy'],
+        request_body=BrandSerializer,
+        responses={201: BrandSerializer, 403: "Forbidden - Admin access required"}
+    )
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can create brands'}, status=status.HTTP_403_FORBIDDEN)
+        return super().post(request, *args, **kwargs)
+
+
+class ModelListCreateView(generics.ListCreateAPIView):
+    """
+    List models (filterable by brand) or create a new one
+    
+    GET: List models, optionally filtered by brand_id
+    POST: Create a model (Admin only)
+    """
+    serializer_class = ModelSerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+    
+    def get_queryset(self):
+        queryset = Model.objects.select_related('brand').all()
+        brand_id = self.request.query_params.get('brand')
+        if brand_id:
+            queryset = queryset.filter(brand_id=brand_id)
+        return queryset
+    
+    @swagger_auto_schema(
+        operation_description="List vehicle models. Filter by brand using ?brand=ID",
+        operation_summary="List Models",
+        tags=['Vehicle Hierarchy'],
+        manual_parameters=[
+            openapi.Parameter('brand', openapi.IN_QUERY, description="Filter by brand ID", type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: ModelSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new model (Admin only)",
+        operation_summary="Create Model",
+        tags=['Vehicle Hierarchy'],
+        request_body=ModelSerializer,
+        responses={201: ModelSerializer, 403: "Forbidden - Admin access required"}
+    )
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can create models'}, status=status.HTTP_403_FORBIDDEN)
+        return super().post(request, *args, **kwargs)
+
+
+class ModelYearListCreateView(generics.ListCreateAPIView):
+    """
+    List model years (filterable by model) or create a new one
+    
+    GET: List model years, optionally filtered by model_id
+    POST: Create a model year (Admin only)
+    """
+    serializer_class = ModelYearSerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+    
+    def get_queryset(self):
+        queryset = ModelYear.objects.select_related('model__brand').all()
+        model_id = self.request.query_params.get('model')
+        if model_id:
+            queryset = queryset.filter(model_id=model_id)
+        return queryset
+    
+    @swagger_auto_schema(
+        operation_description="List model years. Filter by model using ?model=ID",
+        operation_summary="List Model Years",
+        tags=['Vehicle Hierarchy'],
+        manual_parameters=[
+            openapi.Parameter('model', openapi.IN_QUERY, description="Filter by model ID", type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: ModelYearSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new model year (Admin only)",
+        operation_summary="Create Model Year",
+        tags=['Vehicle Hierarchy'],
+        request_body=ModelYearSerializer,
+        responses={201: ModelYearSerializer, 403: "Forbidden - Admin access required"}
+    )
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can create model years'}, status=status.HTTP_403_FORBIDDEN)
+        return super().post(request, *args, **kwargs)
+
+
+class EngineListCreateView(generics.ListCreateAPIView):
+    """
+    List engines (filterable by model_year) or create a new one
+    
+    GET: List engines, optionally filtered by model_year_id
+    POST: Create an engine (Admin only)
+    """
+    serializer_class = EngineSerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+    
+    def get_queryset(self):
+        queryset = Engine.objects.select_related('model_year__model__brand').all()
+        model_year_id = self.request.query_params.get('model_year')
+        if model_year_id:
+            queryset = queryset.filter(model_year_id=model_year_id)
+        return queryset
+    
+    @swagger_auto_schema(
+        operation_description="List engines. Filter by model year using ?model_year=ID",
+        operation_summary="List Engines",
+        tags=['Vehicle Hierarchy'],
+        manual_parameters=[
+            openapi.Parameter('model_year', openapi.IN_QUERY, description="Filter by model year ID", type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: EngineSerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new engine (Admin only)",
+        operation_summary="Create Engine",
+        tags=['Vehicle Hierarchy'],
+        request_body=EngineSerializer,
+        responses={201: EngineSerializer, 403: "Forbidden - Admin access required"}
+    )
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can create engines'}, status=status.HTTP_403_FORBIDDEN)
+        return super().post(request, *args, **kwargs)
+
+
+# Category Views
+
+class CategoryListCreateView(generics.ListCreateAPIView):
+    """
+    List categories or create a new one
+    
+    GET: List all categories. Use ?root=true to get only root categories.
+    POST: Create a category (Admin only)
+    """
+    serializer_class = CategorySerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
+    
+    def get_queryset(self):
+        queryset = Category.objects.select_related('parent').prefetch_related('children').all()
+        root_only = self.request.query_params.get('root')
+        if root_only == 'true':
+            queryset = queryset.filter(parent__isnull=True)
+        parent_id = self.request.query_params.get('parent')
+        if parent_id:
+            queryset = queryset.filter(parent_id=parent_id)
+        return queryset
+    
+    @swagger_auto_schema(
+        operation_description="List categories. Use ?root=true for root categories only, or ?parent=ID for children of a specific category.",
+        operation_summary="List Categories",
+        tags=['Categories'],
+        manual_parameters=[
+            openapi.Parameter('root', openapi.IN_QUERY, description="Set to 'true' to get only root categories", type=openapi.TYPE_BOOLEAN),
+            openapi.Parameter('parent', openapi.IN_QUERY, description="Filter by parent category ID", type=openapi.TYPE_INTEGER),
+        ],
+        responses={200: CategorySerializer(many=True)}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Create a new category (Admin only)",
+        operation_summary="Create Category",
+        tags=['Categories'],
+        request_body=CategorySerializer,
+        responses={201: CategorySerializer, 403: "Forbidden - Admin access required"}
+    )
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can create categories'}, status=status.HTTP_403_FORBIDDEN)
+        return super().post(request, *args, **kwargs)
+
+
+class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Retrieve, update or delete a category
+    """
+    queryset = Category.objects.select_related('parent').prefetch_related('children').all()
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Get category details",
+        operation_summary="Get Category",
+        tags=['Categories'],
+        responses={200: CategorySerializer}
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Update a category (Admin only)",
+        operation_summary="Update Category",
+        tags=['Categories'],
+        request_body=CategorySerializer,
+        responses={200: CategorySerializer, 403: "Forbidden - Admin access required"}
+    )
+    def put(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can update categories'}, status=status.HTTP_403_FORBIDDEN)
+        return super().put(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_description="Delete a category (Admin only)",
+        operation_summary="Delete Category",
+        tags=['Categories'],
+        responses={204: "Deleted", 403: "Forbidden - Admin access required"}
+    )
+    def delete(self, request, *args, **kwargs):
+        if not request.user.is_admin():
+            return Response({'error': 'Only admins can delete categories'}, status=status.HTTP_403_FORBIDDEN)
+        return super().delete(request, *args, **kwargs)
+
+
+# PartImage Views
+
+class PartImageListCreateView(APIView):
+    """
+    List images for a part or upload a new image
+    
+    GET: List all images for a specific part
+    POST: Upload an image for a part (Supplier who owns the part, or Admin)
+    """
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def _get_part(self, part_id):
+        try:
+            return Part.objects.get(id=part_id)
+        except Part.DoesNotExist:
+            return None
+    
+    @swagger_auto_schema(
+        operation_description="List all images for a specific part",
+        operation_summary="List Part Images",
+        tags=['Part Images'],
+        responses={200: PartImageSerializer(many=True), 404: "Part not found"}
+    )
+    def get(self, request, part_id):
+        part = self._get_part(part_id)
+        if not part:
+            return Response({'error': 'Part not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        images = PartImage.objects.filter(part=part)
+        serializer = PartImageSerializer(images, many=True, context={'request': request})
+        return Response(serializer.data)
+    
+    @swagger_auto_schema(
+        operation_description="Upload an image for a part (owner Supplier or Admin)",
+        operation_summary="Upload Part Image",
+        tags=['Part Images'],
+        request_body=PartImageUploadSerializer,
+        responses={
+            201: PartImageSerializer,
+            403: "Forbidden - Must be part owner or admin",
+            404: "Part not found",
+        }
+    )
+    def post(self, request, part_id):
+        part = self._get_part(part_id)
+        if not part:
+            return Response({'error': 'Part not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check ownership: admin or supplier who owns the part
+        if not request.user.is_admin():
+            if not hasattr(request.user, 'supplier_profile') or part.supplier != request.user.supplier_profile:
+                return Response({'error': 'You can only upload images for your own parts'}, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = PartImageUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image = serializer.save(part=part)
+        
+        return Response(
+            PartImageSerializer(image, context={'request': request}).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class PartImageDeleteView(APIView):
+    """
+    Delete a specific part image
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @swagger_auto_schema(
+        operation_description="Delete a part image (owner Supplier or Admin)",
+        operation_summary="Delete Part Image",
+        tags=['Part Images'],
+        responses={
+            204: "Deleted",
+            403: "Forbidden - Must be part owner or admin",
+            404: "Image not found",
+        }
+    )
+    def delete(self, request, pk):
+        try:
+            image = PartImage.objects.select_related('part__supplier').get(id=pk)
+        except PartImage.DoesNotExist:
+            return Response({'error': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not request.user.is_admin():
+            if not hasattr(request.user, 'supplier_profile') or image.part.supplier != request.user.supplier_profile:
+                return Response({'error': 'You can only delete images from your own parts'}, status=status.HTTP_403_FORBIDDEN)
+        
+        image.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

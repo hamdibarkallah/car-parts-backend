@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category, Cart, CartItem, Order, OrderItem
+from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category, Cart, CartItem, Order, OrderItem, PartImage
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -387,3 +387,93 @@ class OrderListSerializer(serializers.ModelSerializer):
     
     def get_item_count(self, obj):
         return obj.items.count()
+
+
+# Vehicle Hierarchy Serializers
+
+class BrandSerializer(serializers.ModelSerializer):
+    model_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Brand
+        fields = ['id', 'name', 'model_count', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def get_model_count(self, obj):
+        return obj.models.count()
+
+
+class ModelSerializer(serializers.ModelSerializer):
+    brand_name = serializers.CharField(source='brand.name', read_only=True)
+    
+    class Meta:
+        model = Model
+        fields = ['id', 'name', 'brand', 'brand_name', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ModelYearSerializer(serializers.ModelSerializer):
+    model_name = serializers.CharField(source='model.name', read_only=True)
+    brand_name = serializers.CharField(source='model.brand.name', read_only=True)
+    
+    class Meta:
+        model = ModelYear
+        fields = ['id', 'year', 'model', 'model_name', 'brand_name', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class EngineSerializer(serializers.ModelSerializer):
+    model_year_display = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Engine
+        fields = ['id', 'name', 'type', 'horsepower', 'model_year', 'model_year_display', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def get_model_year_display(self, obj):
+        return str(obj.model_year)
+
+
+# Category Serializers
+
+class CategorySerializer(serializers.ModelSerializer):
+    parent_name = serializers.CharField(source='parent.name', read_only=True, default=None)
+    full_path = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'parent', 'parent_name', 'full_path', 'children', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def get_full_path(self, obj):
+        return obj.get_full_path()
+    
+    def get_children(self, obj):
+        children = obj.children.all()
+        if children.exists():
+            return [{'id': c.id, 'name': c.name} for c in children]
+        return []
+
+
+# PartImage Serializers
+
+class PartImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PartImage
+        fields = ['id', 'part', 'image', 'image_url', 'is_primary', 'created_at']
+        read_only_fields = ['id', 'created_at']
+    
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image and request:
+            return request.build_absolute_uri(obj.image.url)
+        return None
+
+
+class PartImageUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PartImage
+        fields = ['image', 'is_primary']
