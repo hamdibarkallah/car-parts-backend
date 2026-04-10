@@ -136,6 +136,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:4200',
 ]
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:4200',
+]
 
 # Custom User Model
 AUTH_USER_MODEL = 'marketplace.User'
@@ -144,7 +147,6 @@ AUTH_USER_MODEL = 'marketplace.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',

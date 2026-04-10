@@ -139,7 +139,7 @@ class PartSerializer(serializers.ModelSerializer):
     
     def get_supplier(self, obj):
         return {
-            'id': obj.supplier.id,
+            'id': obj.supplier.pk,
             'business_name': obj.supplier.business_name,
             'user': {
                 'id': obj.supplier.user.id,
