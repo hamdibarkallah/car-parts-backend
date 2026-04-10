@@ -326,3 +326,29 @@ class OrderItem(models.Model):
     
     def __str__(self):
         return f"{self.quantity}x {self.part.name} @ {self.price} in Order #{self.order.id}"
+
+
+class UserVehicle(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='vehicles')
+    nickname = models.CharField(max_length=100, blank=True)
+    brand = models.ForeignKey(Brand, on_delete=models.CASCADE)
+    model = models.ForeignKey(Model, on_delete=models.CASCADE)
+    model_year = models.ForeignKey(ModelYear, on_delete=models.CASCADE)
+    engine = models.ForeignKey(Engine, on_delete=models.SET_NULL, null=True, blank=True)
+    is_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_vehicles'
+        verbose_name = 'User Vehicle'
+        verbose_name_plural = 'User Vehicles'
+        ordering = ['-is_default', '-created_at']
+
+    def __str__(self):
+        label = self.nickname or f"{self.brand.name} {self.model.name} {self.model_year.year}"
+        return f"{self.user.username} - {label}"
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            UserVehicle.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)

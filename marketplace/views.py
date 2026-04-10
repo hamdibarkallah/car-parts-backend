@@ -15,10 +15,12 @@ from .serializers import (
     BrandSerializer, ModelSerializer, ModelYearSerializer, EngineSerializer,
     CategorySerializer,
     PartImageSerializer, PartImageUploadSerializer,
+    UserVehicleSerializer,
 )
 from .models import (
     User, Part, Cart, CartItem, Order, OrderItem,
     Brand, Model, ModelYear, Engine, Category, PartImage,
+    UserVehicle,
 )
 
 
@@ -1123,3 +1125,78 @@ class PartImageDeleteView(APIView):
         
         image.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# My Garage Views
+
+class UserVehicleListCreateView(APIView):
+    """
+    List user's saved vehicles or add a new one
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        vehicles = UserVehicle.objects.filter(user=request.user).select_related(
+            'brand', 'model', 'model_year', 'engine'
+        )
+        serializer = UserVehicleSerializer(vehicles, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = UserVehicleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class UserVehicleDetailView(APIView):
+    """
+    Get, update, or delete a saved vehicle
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_vehicle(self, request, pk):
+        try:
+            return UserVehicle.objects.select_related(
+                'brand', 'model', 'model_year', 'engine'
+            ).get(pk=pk, user=request.user)
+        except UserVehicle.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        vehicle = self._get_vehicle(request, pk)
+        if not vehicle:
+            return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(UserVehicleSerializer(vehicle).data)
+
+    def patch(self, request, pk):
+        vehicle = self._get_vehicle(request, pk)
+        if not vehicle:
+            return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = UserVehicleSerializer(vehicle, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, pk):
+        vehicle = self._get_vehicle(request, pk)
+        if not vehicle:
+            return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
+        vehicle.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class UserVehicleSetDefaultView(APIView):
+    """
+    Set a vehicle as the default
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            vehicle = UserVehicle.objects.get(pk=pk, user=request.user)
+        except UserVehicle.DoesNotExist:
+            return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
+        vehicle.is_default = True
+        vehicle.save()
+        return Response(UserVehicleSerializer(vehicle).data)

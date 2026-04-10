@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
-from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category, Cart, CartItem, Order, OrderItem, PartImage
+from .models import User, Client, Supplier, Part, Brand, Model, ModelYear, Engine, Category, Cart, CartItem, Order, OrderItem, PartImage, UserVehicle
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -477,3 +477,44 @@ class PartImageUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = PartImage
         fields = ['image', 'is_primary']
+
+
+# UserVehicle (My Garage) Serializers
+
+class UserVehicleSerializer(serializers.ModelSerializer):
+    brand_detail = serializers.SerializerMethodField()
+    model_detail = serializers.SerializerMethodField()
+    model_year_detail = serializers.SerializerMethodField()
+    engine_detail = serializers.SerializerMethodField()
+    display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserVehicle
+        fields = [
+            'id', 'nickname', 'brand', 'model', 'model_year', 'engine',
+            'is_default', 'brand_detail', 'model_detail', 'model_year_detail',
+            'engine_detail', 'display_name', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_brand_detail(self, obj):
+        return {'id': obj.brand.id, 'name': obj.brand.name}
+
+    def get_model_detail(self, obj):
+        return {'id': obj.model.id, 'name': obj.model.name}
+
+    def get_model_year_detail(self, obj):
+        return {'id': obj.model_year.id, 'year': obj.model_year.year}
+
+    def get_engine_detail(self, obj):
+        if obj.engine:
+            return {'id': obj.engine.id, 'name': obj.engine.name, 'type': obj.engine.type, 'horsepower': obj.engine.horsepower}
+        return None
+
+    def get_display_name(self, obj):
+        if obj.nickname:
+            return obj.nickname
+        name = f"{obj.brand.name} {obj.model.name} {obj.model_year.year}"
+        if obj.engine:
+            name += f" - {obj.engine.name}"
+        return name

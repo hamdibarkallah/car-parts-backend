@@ -9,6 +9,7 @@ from .views import (
     BrandListCreateView, ModelListCreateView, ModelYearListCreateView, EngineListCreateView,
     CategoryListCreateView, CategoryDetailView,
     PartImageListCreateView, PartImageDeleteView,
+    UserVehicleListCreateView, UserVehicleDetailView, UserVehicleSetDefaultView,
 )
 
 router = DefaultRouter()
@@ -47,4 +48,9 @@ urlpatterns = [
     # Order endpoints
     path('orders/', OrderListCreateView.as_view(), name='order-list-create'),
     path('orders/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
+    
+    # My Garage endpoints
+    path('garage/', UserVehicleListCreateView.as_view(), name='garage-list-create'),
+    path('garage/<int:pk>/', UserVehicleDetailView.as_view(), name='garage-detail'),
+    path('garage/<int:pk>/set-default/', UserVehicleSetDefaultView.as_view(), name='garage-set-default'),
 ] + router.urls
