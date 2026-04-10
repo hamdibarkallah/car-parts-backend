@@ -661,10 +661,15 @@ class OrderListCreateView(APIView):
         }
     )
     def get(self, request):
-        if not hasattr(request.user, 'client_profile'):
-            return Response({'error': 'Only clients can view orders'}, status=status.HTTP_403_FORBIDDEN)
+        if hasattr(request.user, 'client_profile'):
+            orders = Order.objects.filter(client=request.user.client_profile).order_by('-created_at')
+        elif hasattr(request.user, 'supplier_profile'):
+            orders = Order.objects.filter(
+                items__supplier=request.user.supplier_profile
+            ).distinct().order_by('-created_at')
+        else:
+            return Response({'error': 'No profile found'}, status=status.HTTP_403_FORBIDDEN)
         
-        orders = Order.objects.filter(client=request.user.client_profile).order_by('-created_at')
         serializer = OrderListSerializer(orders, many=True)
         return Response(serializer.data)
     

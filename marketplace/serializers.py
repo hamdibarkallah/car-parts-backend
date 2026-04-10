@@ -126,13 +126,24 @@ class PartSerializer(serializers.ModelSerializer):
     category = serializers.SerializerMethodField()
     is_in_stock = serializers.SerializerMethodField()
     vehicle_compatibility = serializers.SerializerMethodField()
+    supplier_name = serializers.SerializerMethodField()
+    brand_name = serializers.SerializerMethodField()
+    model_name = serializers.SerializerMethodField()
+    model_year_value = serializers.SerializerMethodField()
+    engine_name = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    primary_image = serializers.SerializerMethodField()
+    available_quantity = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
     
     class Meta:
         model = Part
         fields = [
-            'id', 'supplier', 'name', 'reference', 'description',
-            'brand', 'model', 'model_year', 'engine', 'category',
-            'price', 'quantity', 'condition', 'is_in_stock', 'vehicle_compatibility',
+            'id', 'supplier', 'supplier_name', 'name', 'reference', 'description',
+            'brand', 'brand_name', 'model', 'model_name', 'model_year', 'model_year_value',
+            'engine', 'engine_name', 'category', 'category_name',
+            'price', 'quantity', 'available_quantity', 'condition',
+            'is_in_stock', 'primary_image', 'images', 'vehicle_compatibility',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -186,6 +197,60 @@ class PartSerializer(serializers.ModelSerializer):
     
     def get_vehicle_compatibility(self, obj):
         return obj.get_vehicle_compatibility()
+
+    def get_supplier_name(self, obj):
+        return obj.supplier.business_name
+
+    def get_brand_name(self, obj):
+        return obj.brand.name
+
+    def get_model_name(self, obj):
+        return obj.model.name
+
+    def get_model_year_value(self, obj):
+        return obj.model_year.year
+
+    def get_engine_name(self, obj):
+        return obj.engine.name if obj.engine else None
+
+    def get_category_name(self, obj):
+        return obj.category.name
+
+    def get_primary_image(self, obj):
+        primary = obj.images.filter(is_primary=True).first()
+        if primary:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(primary.image.url)
+            return primary.image.url
+        first = obj.images.first()
+        if first:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(first.image.url)
+            return first.image.url
+        return None
+
+    def get_available_quantity(self, obj):
+        return obj.quantity
+
+    def get_images(self, obj):
+        images = obj.images.all()
+        request = self.context.get('request')
+        result = []
+        for img in images:
+            image_url = img.image.url
+            if request:
+                image_url = request.build_absolute_uri(image_url)
+            result.append({
+                'id': img.id,
+                'part': img.part_id,
+                'image': img.image.url,
+                'image_url': image_url,
+                'is_primary': img.is_primary,
+                'created_at': img.created_at.isoformat() if hasattr(img, 'created_at') else None
+            })
+        return result
 
 
 class PartCreateSerializer(serializers.ModelSerializer):
