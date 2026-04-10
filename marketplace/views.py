@@ -280,6 +280,14 @@ class PartListCreateView(generics.ListCreateAPIView):
         if in_stock == 'true':
             queryset = queryset.filter(quantity__gt=0)
         
+        # Filter by price range
+        price_min = self.request.query_params.get('price_min')
+        if price_min:
+            queryset = queryset.filter(price__gte=price_min)
+        price_max = self.request.query_params.get('price_max')
+        if price_max:
+            queryset = queryset.filter(price__lte=price_max)
+        
         # Search by name or reference
         search = self.request.query_params.get('search')
         if search:
