@@ -30,8 +30,5 @@ RUN mkdir -p /app/media /app/staticfiles
 # Expose port 8000
 EXPOSE 8000
 
-# Run entrypoint script
-COPY entrypoint.sh /app/
-RUN chmod +x /app/entrypoint.sh
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Run Django server directly
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

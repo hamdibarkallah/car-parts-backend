@@ -11,6 +11,10 @@ from .views import (
     PartImageListCreateView, PartImageDeleteView,
     UserVehicleListCreateView, UserVehicleDetailView, UserVehicleSetDefaultView,
 )
+from .views_supplier_orders import (
+    SupplierOrderListView, SupplierOrderDetailView, 
+    SupplierOrderValidationView, SupplierOrderStatsView
+)
 
 router = DefaultRouter()
 
@@ -48,6 +52,12 @@ urlpatterns = [
     # Order endpoints
     path('orders/', OrderListCreateView.as_view(), name='order-list-create'),
     path('orders/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
+    
+    # Supplier Order endpoints
+    path('supplier/orders/', SupplierOrderListView.as_view(), name='supplier-order-list'),
+    path('supplier/orders/<int:pk>/', SupplierOrderDetailView.as_view(), name='supplier-order-detail'),
+    path('supplier/orders/<int:pk>/validate/', SupplierOrderValidationView.as_view(), name='supplier-order-validate'),
+    path('supplier/orders/stats/', SupplierOrderStatsView.as_view(), name='supplier-order-stats'),
     
     # My Garage endpoints
     path('garage/', UserVehicleListCreateView.as_view(), name='garage-list-create'),

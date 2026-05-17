@@ -399,40 +399,82 @@ class UpdateCartItemSerializer(serializers.Serializer):
 
 # Order Serializers
 
-class OrderItemSerializer(serializers.ModelSerializer):
-    """Read serializer for order items"""
-    part_detail = serializers.SerializerMethodField()
-    supplier_detail = serializers.SerializerMethodField()
+# class OrderItemSerializer(serializers.ModelSerializer):
+#     """Read serializer for order items"""
+#     part_detail = serializers.SerializerMethodField()
+#     supplier_detail = serializers.SerializerMethodField()
     
+#     class Meta:
+#         model = OrderItem
+#         fields = ['id', 'part', 'part_detail', 'supplier', 'supplier_detail', 'quantity', 'price', 'total_price']
+#         read_only_fields = ['id']
+    
+#     def get_part_detail(self, obj):
+#         return {
+#             'id': obj.part.id,
+#             'name': obj.part.name,
+#             'reference': obj.part.reference,
+#         }
+    
+#     def get_supplier_detail(self, obj):
+#         return {
+#             'id': obj.supplier.user.id,
+#             'business_name': obj.supplier.business_name,
+#         }
+# class OrderSerializer(serializers.ModelSerializer):
+#     """Read serializer for orders with all items"""
+#     items = OrderItemSerializer(many=True, read_only=True)
+#     client_username = serializers.SerializerMethodField()
+    
+#     class Meta:
+#         model = Order
+#         fields = ['id', 'client', 'client_username', 'total_price', 'status', 'items', 'created_at', 'updated_at']
+#         read_only_fields = ['id', 'client', 'total_price', 'created_at', 'updated_at']
+    
+#     def get_client_username(self, obj):
+#         return obj.client.user.username
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    part = serializers.SerializerMethodField()
+    supplier = serializers.SerializerMethodField()
+
     class Meta:
         model = OrderItem
-        fields = ['id', 'part', 'part_detail', 'supplier', 'supplier_detail', 'quantity', 'price', 'total_price']
-        read_only_fields = ['id']
-    
-    def get_part_detail(self, obj):
+        fields = ['id', 'part', 'supplier', 'quantity', 'price', 'total_price']
+
+    def get_part(self, obj):
+        primary_image = obj.part.images.filter(is_primary=True).first() or obj.part.images.first()
+        request = self.context.get('request')
+        image_url = None
+        if primary_image and request:
+            image_url = request.build_absolute_uri(primary_image.image.url)
         return {
             'id': obj.part.id,
             'name': obj.part.name,
             'reference': obj.part.reference,
+            'primary_image': image_url,
         }
-    
-    def get_supplier_detail(self, obj):
+
+    def get_supplier(self, obj):
         return {
             'id': obj.supplier.user.id,
-            'business_name': obj.supplier.business_name,
+            'company_name': obj.supplier.business_name,
         }
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    """Read serializer for orders with all items"""
     items = OrderItemSerializer(many=True, read_only=True)
+    client = ClientProfileSerializer(read_only=True)  # ✅ remplace l'ID par l'objet complet
     client_username = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Order
-        fields = ['id', 'client', 'client_username', 'total_price', 'status', 'items', 'created_at', 'updated_at']
+        fields = [
+            'id', 'client', 'client_username', 'total_price',
+            'status', 'supplier_notes', 'items', 'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'client', 'total_price', 'created_at', 'updated_at']
-    
+
     def get_client_username(self, obj):
         return obj.client.user.username
 
